@@ -68,7 +68,7 @@ func (aof *Aof) Read(fn func(value Value)) error {
   reader := NewResp(aof.file)
 
   for {
-    val, err := reader.Read()
+    value, err := reader.Read()
 
     if err != nil {
       if err == io.EOF {
@@ -77,7 +77,7 @@ func (aof *Aof) Read(fn func(value Value)) error {
       return err
     }
 
-    fn(val)
+    fn(value)
   }
 
   return nil

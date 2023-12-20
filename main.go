@@ -25,7 +25,7 @@ func main() {
 
   defer aof.Close()
 
-  aof.Read(func(value Value) {
+  fn := func(value Value) {
     command := strings.ToUpper(value.array[0].bulk)
     args := value.array[1:]
 
@@ -37,7 +37,10 @@ func main() {
     }
 
     handler(args)
-  })
+  }
+
+  aof.Read(fn)
+
   conn, err := l.Accept()
   if err != nil {
     fmt.Println(err)
