@@ -26,15 +26,14 @@ func main() {
   for {
     resp := NewResp(conn)
 
-    value, err := resp.Read()
+    _, err := resp.Read()
 
     if err != nil {
       fmt.Println(err)
       return
     }
 
-    fmt.Println(value)
-
-    conn.Write([]byte("+OK\r\n"))
+    writer := NewWriter(conn)
+    writer.Write(Value{typ: "string", str: "PONG"})
   }
 }
