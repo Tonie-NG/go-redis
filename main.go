@@ -7,85 +7,81 @@ import (
 )
 
 func main() {
-  fmt.Println("Listening on port :6379")
+	fmt.Println("Listening on port :6379")
 
-  l, err := net.Listen("tcp", ":6379")
+	l, err := net.Listen("tcp", ":6379")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
-  if err != nil {
-    fmt.Println(err)
-    return
-  }
+	aof, err := NewAof("database.txt")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
-  aof, err := NewAof("database.txt")
+	defer aof.Close()
 
-  if err != nil {
-    fmt.Println(err)
-    return
-  }
+	fn := func(value Value) {
+		command := strings.ToUpper(value.array[0].bulk)
+		args := value.array[1:]
 
-  defer aof.Close()
+		handler, ok := Handlers[command]
 
-  fn := func(value Value) {
-    command := strings.ToUpper(value.array[0].bulk)
-    args := value.array[1:]
+		if !ok {
+			fmt.Println("Invalid command: ", command)
+			return
+		}
 
-    handler, ok := Handlers[command]
+		handler(args)
+	}
 
-    if !ok {
-      fmt.Println("Invalid command: ", command)
-      return
-    }
+	aof.Read(fn)
 
-    handler(args)
-  }
+	conn, err := l.Accept()
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	defer conn.Close()
 
-  aof.Read(fn)
+	for {
+		resp := NewResp(conn)
 
-  conn, err := l.Accept()
-  if err != nil {
-    fmt.Println(err)
-    return
-  }
+		value, err := resp.Read()
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
 
-  defer conn.Close()
+		if value.typ != "array" {
+			fmt.Println("Invalid request, expected array")
+			continue
+		}
 
-  for {
-    resp := NewResp(conn)
+		if len(value.array) == 0 {
+			fmt.Println("Invalid request, expected array length > 0")
+			continue
+		}
 
-    value, err := resp.Read()
+		command := strings.ToUpper(value.array[0].bulk)
+		args := value.array[1:]
 
-    if err != nil {
-      fmt.Println(err)
-      return
-    }
+		writer := NewWriter(conn)
+		handler, ok := Handlers[command]
 
-    if value.typ != "array" {
-      fmt.Println("Invalid request, expected array")
-      continue
-    }
+		if !ok {
+			fmt.Println("Invalid command: ", command)
+			writer.Write(Value{typ: "string", str: ""})
+			continue
+		}
 
-    if len(value.array) == 0 {
-      fmt.Println("Invalid request, expected array length > 0")
-      continue
-    }
+		if command == "SET" || command == "HSET" {
+			aof.Write(value)
+		}
 
-    command := strings.ToUpper(value.array[0].bulk)
-    args := value.array[1:]
-
-    writer := NewWriter(conn)
-    handler, ok := Handlers[command]
-
-    if !ok {
-      fmt.Println("Invalid command: ", command)
-      writer.Write(Value{typ: "string", str: ""})
-      continue
-    }
-
-    if command == "SET" || command == "HSET" {
-      aof.Write(value)
-    }
-
-    result := handler(args)
-    writer.Write(result)
-  }
+		result := handler(args)
+		writer.Write(result)
+	}
 }
